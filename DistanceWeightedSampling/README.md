@@ -64,5 +64,7 @@ $ python DistanceWeightedSampling.py
 
 - margin loss：跟传统的triplet loss不同是增加了一个beta，进行可训练的来调节样本之间的margin
 
-  ![loss](https://st-gdx.dancf.com/gaodingx/39347986/design/mega/20190521-214244-61c8.jpg)
+  <img src = "https://st-gdx.dancf.com/gaodingx/39347986/design/mega/20190521-214244-61c8.jpg" width="100%"/>
+  
+  
 
