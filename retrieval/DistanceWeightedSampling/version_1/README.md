@@ -47,7 +47,7 @@ python test.py 权重路径, 特征保存路径（第一次会先提取特征再
 - 该方法的核心在于negtive sample的选择策略
 - margin loss：跟传统的triplet loss不同的是增加了一个beta，进行可训练的来调节样本之间的margin
 
-  <img src = "https://st-gdx.dancf.com/gaodingx/39347986/design/mega/20190521-214244-61c8.jpg" width="100%"/>
+  <img src = "https://st-gdx.dancf.com/gaodingx/39347986/design/mega/20190521-214244-61c8.jpg" width="100%" height="100%"/>
   
   
 
