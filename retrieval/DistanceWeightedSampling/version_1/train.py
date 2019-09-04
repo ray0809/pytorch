@@ -23,7 +23,7 @@ parser.add_argument('--embed_dim',type=int,default=128,
                     help='dimensionality of image embeding,times of 8')
 parser.add_argument('--batch_size',type=int,default=200,
                     help='training batch size per device')
-parser.add_argument('--batch_k',type=int,default=20,
+parser.add_argument('--batch_k',type=int,default=4,
                     help='number of images per class in a batch,can be divided by batch_size')
 parser.add_argument('--gpu_ids',type=str,default='0,1',
                     help='the gpu_id of the runing batch')
