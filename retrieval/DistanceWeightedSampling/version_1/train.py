@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader
 from data_loader import TripletDataset, BalancedBatchSampler
 from model import MarginNet
 from loss import Margin_Loss
+from loss1 import MarginLoss
 from util import cal_map
 
 
@@ -21,13 +22,15 @@ parser.add_argument('--test_txt',type=str,default="./txt/test.txt",
                     help='test path of the cifar10')
 parser.add_argument('--embed_dim',type=int,default=128,
                     help='dimensionality of image embeding,times of 8')
-parser.add_argument('--batch_size',type=int,default=200,
+parser.add_argument('--batch_size',type=int,default=100,
                     help='training batch size per device')
-parser.add_argument('--batch_k',type=int,default=4,
+parser.add_argument('--batch_k',type=int,default=10,
                     help='number of images per class in a batch,can be divided by batch_size')
-parser.add_argument('--gpu_ids',type=str,default='0,1',
+parser.add_argument('--nclass',type=int,default=10,
+                    help='the number of class')
+parser.add_argument('--gpu_ids',type=str,default='0',
                     help='the gpu_id of the runing batch')
-parser.add_argument('--epochs',type=int,default=40,
+parser.add_argument('--epochs',type=int,default=30,
                     help='number of training epochs,default is 100')
 parser.add_argument('--lr',type=float,default=0.005,
                     help='learning rate of the resnet and dense layer')
@@ -85,12 +88,14 @@ def train():
     if len(gpu_ids) > 1:
         model = nn.DataParallel(model, device_ids=gpu_ids)
     model = model.to(device)
-    beta = torch.tensor(np.ones(opt.batch_size)*opt.beta, requires_grad=True, dtype=torch.float32, device=device)
 
-    criterion = Margin_Loss(batch_k=opt.batch_k, margin=opt.margin, nu=opt.nu)
+    # beta = torch.tensor(np.ones(opt.batch_size)*opt.beta, requires_grad=True, dtype=torch.float32, device=device)
+    # criterion = Margin_Loss(batch_k=opt.batch_k, margin=opt.margin, nu=opt.nu)
+    # optimizer = torch.optim.SGD(params=model.parameters(), lr=opt.lr, momentum=0.9)
+    # optimizer_beta = torch.optim.SGD([{'params':beta}], lr=opt.lr_beta, momentum= 0.9)
+
+    criterion = MarginLoss(margin=opt.margin, nu=opt.nu, nclass=opt.nclass, beta_constant=False)
     optimizer = torch.optim.SGD(params=model.parameters(), lr=opt.lr, momentum=0.9)
-    optimizer_beta = torch.optim.SGD([{'params':beta}], lr=opt.lr_beta, momentum= 0.9)
-
     lr_schedule = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=steps, gamma=opt.factor)
 
 
@@ -107,13 +112,14 @@ def train():
 
             embedding = model(imgs)
 
-            loss = criterion(embedding, targets, beta)
+            # loss = criterion(embedding, targets, beta)
+            loss = criterion(embedding, targets)
             total_loss += loss.item()
             optimizer.zero_grad()
-            optimizer_beta.zero_grad()
+            # optimizer_beta.zero_grad()
             loss.backward()
             optimizer.step()
-            optimizer_beta.step()
+            # optimizer_beta.step()
             train_count +=1
 
         
