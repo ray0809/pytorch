@@ -42,7 +42,7 @@ python test.py 权重路径, 特征保存路径（第一次会先提取特征再
 
 
 ## 讨论
-- 采样和loss的代码沿用了参考第三个的代码，其他几个都有训练不收敛的情况，如果你没遇到类似问题，烦请告知下，我请教请教
+- 采样和loss的代码沿用了参考第三个的代码(loss1沿用参考第四个代码)，其他几个都有训练不收敛的情况，如果你没遇到类似问题，烦请告知下，我请教请教
 - dataloader的设计：假设一个batch_size=40，随机取8个类，那么每个类取5个样本，这样构成一个batch。继承了data的Sampler类，进行有目的的采样
 - 该方法的核心在于negtive sample的选择策略
 - margin loss：跟传统的triplet loss不同的是增加了一个beta，进行可训练的来调节样本之间的margin
@@ -63,3 +63,5 @@ python test.py 权重路径, 特征保存路径（第一次会先提取特征再
 - [multigrain](https://github.com/facebookresearch/multigrain)
 
 - [DeepEmbedding](https://github.com/hudengjunai/DeepEmbeding/blob/master/models/sample_dml.py)
+
+- [research-ms-loss](https://github.com/MalongTech/research-ms-loss)
