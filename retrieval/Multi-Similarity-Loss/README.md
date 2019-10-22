@@ -1,6 +1,6 @@
 ## Sampling Matters in Deep Embedding Learning
 
-针对triplet三元组的采样策略，核心就在于一个batch中的negtive sample的选择
+multi-similarity loss
 
 ## 兼容
 
