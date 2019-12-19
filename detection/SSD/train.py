@@ -2,18 +2,19 @@ import os
 import cv2
 import math
 import random
+import torchsnooper
 from tqdm import tqdm
 import torch.optim as optim
-from torch.optim.lr_scheduler import MultiStepLR
+from torch.optim.lr_scheduler import MultiStepLR, StepLR
 
-
+from utils import *
 from dataset import *
 from layers.build import *
 from layers.loss import *
 from layers.bbox_utils import *
 from config import config as cfg
 
-
+torch.backends.cudnn.benchmark = True
 
 def train(cfg):
     # 第一步，构建模型
@@ -53,65 +54,79 @@ def train(cfg):
                           weight_decay=cfg.weight_decay)
     scheduler = MultiStepLR(optimizer, cfg.milestones, cfg.gamma, -1)
 
-    min_loss = np.inf
-    step_index = 0
+    
     prior_bboxes = generator_prior_bboxes(cfg)
+    batch_iterator = iter(dataloader)
+    tqdm_iters = tqdm(range(0, cfg.max_iter))
 
-    for epoch in range(cfg.epoches):
+    min_loss = np.inf
+    average_loss = 0.0
+    average_loc = 0.0
+    average_conf = 0.0
+
+    # with torchsnooper.snoop():
+    for its in tqdm_iters:
         scheduler.step()
         
-        average_loss = 0.0
-        average_loc = 0.0
-        average_conf = 0.0
-        tqdm_iters = tqdm(dataloader)
+        try:
+            imgs, bboxes, labels, _ = next(batch_iterator)
+        except StopIteration:
+            batch_iterator = iter(dataloader)
+            imgs, bboxes, labels, _ = next(batch_iterator)
 
-        for imgs, bboxes, labels, _ in tqdm_iters:
-            imgs = imgs.to(cfg.device)
 
-            pred_conf, pred_loc = ssd_model(imgs)
-            # dataloader出来的bbox是针对img上的绝对坐标
-            gt_bboxes, gt_labels = generator_grouth(bboxes, 
-                                                    labels, 
-                                                    prior_bboxes,
-                                                    cfg.iou_threshold)
+        imgs = imgs.to(cfg.device)
 
-            gt_offset = convert_cetner_to_offset(gt_bboxes, prior_bboxes, corner=True)
-            gt_offset = gt_offset.to(cfg.device)
-            gt_labels = gt_labels.to(cfg.device)
+        pred_conf, pred_loc = ssd_model(imgs)
+        # dataloader出来的bbox是针对img上的绝对坐标
+        gt_bboxes, gt_labels = generator_grouth(bboxes, 
+                                                labels, 
+                                                prior_bboxes,
+                                                cfg.iou_threshold)
 
-            loc_loss, conf_loss = criterion(pred_loc,
-                                            pred_conf,
-                                            gt_offset,
-                                            gt_labels,
-                                            cfg.neg_pos_ratio)
-            
-            optimizer.zero_grad()
-            loss = loc_loss + conf_loss
-            
-            average_loss += loss.item()
-            average_loc += loc_loss.item()
-            average_conf += conf_loss.item()
+        gt_offset = convert_cetner_to_offset(gt_bboxes, prior_bboxes, corner=True)
+        gt_offset = gt_offset.to(cfg.device)
+        gt_labels = gt_labels.to(cfg.device)
 
-            loss.backward()
-            optimizer.step()
-            tqdm_iters.set_description("epoch {}".format(epoch+1))
-            tqdm_iters.set_postfix(loc=np.round(loc_loss.item(), 6),
-                                    conf=np.round(conf_loss.item(), 6),
-                                    total=np.round(loss.item(), 6))
-        average_loss /= len(dataloader)
-        average_loc /= len(dataloader)
-        average_conf /= len(dataloader)
-        print('>>>epoch: {}, \
-              average loss: {:.4f}, \
-              loc loss: {:.4f}, \
-              conf loss: {:.4f}'.format(epoch+1, 
+        loc_loss, conf_loss = criterion(pred_loc,
+                                        pred_conf,
+                                        gt_offset,
+                                        gt_labels,
+                                        cfg.neg_pos_ratio)
+        
+        optimizer.zero_grad()
+        loss = loc_loss + conf_loss
+        
+        average_loss += loss.item()
+        average_loc += loc_loss.item()
+        average_conf += conf_loss.item()
+
+        loss.backward()
+        optimizer.step()
+        tqdm_iters.set_description("iter {}".format(its+1))
+        tqdm_iters.set_postfix(loc=loc_loss.item(),
+                                conf=conf_loss.item(),
+                                total=loss.item())
+
+        if (its + 1) % cfg.check_iter == 0:
+            average_loss /= cfg.check_iter
+            average_loc /= cfg.check_iter
+            average_conf /= cfg.check_iter
+            print('\n>>>iter: {}, \
+                    average loss: {:.4f}, \
+                    loc loss: {:.4f}, \
+                    conf loss: {:.4f}'.format(its+1, 
                                         average_loss,
                                         average_loc,
                                         average_conf))
-        if average_loss < min_loss:
-            min_loss = average_loss
-            torch.save(ssd_model.module.state_dict(), os.path.join(cfg.save_weights, 'best.pth'))
-
+            if average_loss < min_loss:
+                min_loss = average_loss
+                # torch.save(ssd_model.module.state_dict(), os.path.join(cfg.save_weights, 'best.pth'))
+                torch.save(ssd_model.state_dict(), cfg.save_weights)
+            
+            average_loss = 0.0
+            average_loc = 0.0
+            average_conf = 0.0
 
 if __name__ == '__main__':
     os.system('clear')

@@ -12,6 +12,7 @@ from tensorboardX import SummaryWriter
 
 from config import config as cfg
 from dataset import *
+from utils import load_state_dict
 from layers.build import *
 from layers.bbox_utils import *
 
@@ -339,17 +340,18 @@ def test_predict():
                     'motorbike', 'person', 'pottedplant',
                     'sheep', 'sofa', 'train', 'tvmonitor']
 
-    img = cv2.imread('./dummyImgs/2.jpg', 1)
+    img = cv2.imread('./dummyImgs/4.jpg', 1)
     img = cv2.resize(img, (300,300))
-    img_float = img.astype('float32')
-    img_float /= 255.0
+    img_float = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img_float = img_float.astype('float32')
+    # img_float /= 255.0
+    img_float -= np.array([123, 117, 104])
     img_tensor = torch.from_numpy(img_float).permute(2,0,1).unsqueeze(0)
 
     # 第一步，构建模型
     ssd_model = build_vgg_ssd(cfg)
     ssd_model.init()
-    state_dict = torch.load(os.path.join(cfg.save_weights, 'best.pth'), 
-                            map_location=lambda storage, loc: storage)
+    state_dict = load_state_dict(os.path.join('./weights/zhuque_best.pth'))
     ssd_model.load_state_dict(state_dict)
     ssd_model = ssd_model.eval()
     prior_bboxes = generator_prior_bboxes(cfg)
@@ -359,40 +361,48 @@ def test_predict():
         pred_loc = convert_center_to_corner(pred_loc)
 
         # print(pred_loc.shape, pred_conf.shape)
-        nms_bboxes, nms_probs, nms_labels = nms(pred_loc[0], 
+        nms_bboxes, nms_probs, nms_labels = nms1(pred_loc[0], 
                                                 pred_conf[0],
-                                                prob_threshold=0.0, 
-                                                iou_threshold=0.4,
+                                                prob_threshold=0.1, 
+                                                iou_threshold=0.5,
                                                 topN=200)
         
         
-        nms_bboxes_np = nms_bboxes.data.numpy()
-        nms_labels_np = nms_labels.data.numpy()
-        nms_probs_np = nms_probs.data.numpy()
-        num = nms_bboxes_np.shape[0]
-        for i in range(num):
-            
-            bbox = nms_bboxes_np[i]
-            label = nms_labels_np[i]
-            prob = nms_probs_np[i]
-            print(">>>")
-            print("    predict category: {}, pro: {:.4f}".format(VOC_CLASSES[label], prob))
-            print("    predict bbox: {}".format(bbox))
-            xmin, ymin, xmax, ymax = [math.floor(b) for b in bbox]
-            
-            cv2.rectangle(img, 
-                            (xmin, ymin), 
-                            (xmax, ymax),
-                            color=(255,0,0),thickness=2)
+    nms_bboxes_np = nms_bboxes.data.numpy()
+    nms_labels_np = nms_labels.data.numpy()
+    nms_probs_np = nms_probs.data.numpy()
+    num = nms_bboxes_np.shape[0]
+    for i in range(num):
+        
+        bbox = nms_bboxes_np[i]
+        label = nms_labels_np[i]
+        prob = nms_probs_np[i]
+        print(">>>")
+        print("    predict category: {}, pro: {:.4f}".format(VOC_CLASSES[label], prob))
+        print("    predict bbox: {}".format(bbox))
+        xmin, ymin, xmax, ymax = [math.floor(b) for b in bbox]
+        
+        color = (random.randint(0,255), random.randint(0,255), random.randint(0,255))
+        cv2.rectangle(img, 
+                        (xmin, ymin), 
+                        (xmax, ymax),
+                        color=color,thickness=2)
+        cv2.putText(img,
+                    text=VOC_CLASSES[label],
+                    org=(xmin, ymin + 10),
+                    fontFace=cv2.FONT_HERSHEY_PLAIN,
+                    fontScale=1,
+                    thickness=2,
+                    color=color)
     cv2.imshow('test', img)
     cv2.waitKey(0)
 
 
 if __name__ == '__main__':
 
-    os.system("clear")
+    # os.system("clear")
 
-    load_pretrained()
+    test_predict()
 
 
 

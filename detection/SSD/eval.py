@@ -8,14 +8,13 @@ import numpy as np
 from tqdm import tqdm
 
 from config import config as cfg
+from utils import *
 from dataset import *
 from layers.build import *
 from layers.bbox_utils import *
 
-# import resource
-# rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-# resource.setrlimit(resource.RLIMIT_NOFILE, (2048, rlimit[1]))
 
+# 这句话的作用主要是在测试阶段，发现pytorch的dataloader会报错
 torch.multiprocessing.set_sharing_strategy('file_system') 
 
 def eval():
@@ -48,11 +47,11 @@ def eval():
 
     # 第一步，构建模型
     ssd_model = build_vgg_ssd(cfg)
-    state_dict = torch.load(os.path.join(cfg.save_weights, 'best.pth'), 
-                            map_location=lambda storage, loc: storage)
+    state_dict = load_state_dict(cfg.save_weights)
     ssd_model.load_state_dict(state_dict)
     ssd_model = ssd_model.to(cfg.device)
-    ssd_model = ssd_model.eval()
+    
+    ssd_model.eval()
     f_write = {}
 
     count = 0
@@ -68,19 +67,19 @@ def eval():
             # print(pred_loc.shape, pred_conf.shape)
             batch = pred_loc.size(0)
             for b in range(batch):
-                nms_bboxes, nms_probs, nms_labels = nms(pred_loc[b], 
+                nms_bboxes, nms_probs, nms_labels = nms1(pred_loc[b], 
                                                         pred_conf[b],
-                                                        prob_threshold=0.0, 
+                                                        prob_threshold=0.01, 
                                                         iou_threshold=0.5,
-                                                        topN=400)
+                                                        topN=200)
             
-                nms_bboxes_np = nms_bboxes.cpu().data.numpy()
-                nms_labels_np = nms_labels.cpu().data.numpy()
-                nms_probs_np = nms_probs.cpu().data.numpy()
+                nms_bboxes_np = nms_bboxes.data.numpy()
+                nms_labels_np = nms_labels.data.numpy()
+                nms_probs_np = nms_probs.data.numpy()
 
-                gt_bboxes_np = bboxes[b].cpu().data.numpy()
-                gt_labels_np = labels[b].cpu().data.numpy()
-                gt_diffcults_np = diffcults[b].cpu().data.numpy()
+                gt_bboxes_np = bboxes[b].data.numpy()
+                gt_labels_np = labels[b].data.numpy()
+                gt_diffcults_np = diffcults[b].data.numpy()
 
                 f_write[count] = {'pred_bboxes':nms_bboxes_np,
                                   'pred_labels':nms_labels_np,
@@ -91,11 +90,11 @@ def eval():
 
                 count += 1
     
-    joblib.dump(f_write, './weights/pred_test_dataset.joblib')
+    joblib.dump(f_write, cfg.eval_result_save_path)
 
 
 def cal_rec_pre(iou_threshold=0.5):
-    data = joblib.load('./weights/pred_test_dataset.joblib')
+    data = joblib.load(cfg.eval_result_save_path)
     VOC_CLASSES = [ 'background',
                     'aeroplane', 'bicycle', 'bird', 'boat',
                     'bottle', 'bus', 'car', 'cat', 'chair',
@@ -165,7 +164,7 @@ def cal_rec_pre(iou_threshold=0.5):
                 iter_pre.append(pre)
                 iter_rec.append(rec)
             iter_pre, iter_rec = np.array(iter_pre), np.array(iter_rec)
-            cat_map = cal_map(iter_pre, iter_rec, use_07_metric=False)
+            cat_map = cal_map(iter_pre, iter_rec, use_07_metric=True)
             MAP += cat_map
             print('catgory: {}, map: {}'.format(VOC_CLASSES[label], cat_map))
     print('mean average precision: {}'.format(MAP / 20))
@@ -224,6 +223,6 @@ def cal_map(precision, recall, use_07_metric=False):
 
 
 if __name__ == '__main__':
-    os.system('clear')
+    # os.system('clear')
     eval()
     cal_rec_pre()

@@ -3,11 +3,13 @@ import torch
 
 class config:
     class_num = 21
-    root = '/home/hanbing/hanbing_data/datasets/detection/VOCdevkit'
+    # top = '/home/datalab/ex_disk2/ainfs'
+    top = '/home/hanbing'
+    root = '{}/hanbing_data/datasets/detection/VOCdevkit'.format(top)
     years = ['VOC2007', 'VOC2012']
     vgg_pretrained_weights = './weights/vgg16_reducedfc.pth'
-    save_weights = './weights/'
-
+    save_weights = './weights/best.path'
+    eval_result_save_path = './weights/pred_test_dataset.joblib'
     # 自己模拟的一些测试数据，用于验证数据增广，生成器等
     temp_root = './dataset/test_voc_data/'
 
@@ -48,16 +50,18 @@ class config:
 
 
     # 训练参数
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0")
     device_cpu = torch.device("cpu")
     batch_size = 64
     num_workers = 8
     epoches = 200
+    max_iter = 60000
+    check_iter = 5000
     lr = 1e-3
     momentum = 0.9
     weight_decay = 5e-4
     neg_pos_ratio = 3
     # 选择迭代到对应步数进行lr衰减：lr *= gamma^step
-    milestones = [120, 160]
+    milestones = [40000, 50000, 60000]
     gamma = 0.1
 

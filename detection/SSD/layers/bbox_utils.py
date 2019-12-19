@@ -24,14 +24,14 @@ def generator_prior_bboxes(cfg, corner=True):
     '''
     prior_bboxes = []
     for k, feat_size in enumerate(cfg.featmap_size):
-        receptivefield = cfg.input_dim / cfg.steps[k]
+        # receptivefield = cfg.input_dim / cfg.steps[k]
         ratio = cfg.ratios[k]
         down_size, up_size = cfg.sizes[k], cfg.sizes[k+1]
         sqrt_size = sqrt(down_size * up_size)
         # 全排列，生成featmap的每个坐标
         for j, i in product(range(feat_size), repeat=2):
-            center_x = (i + 0.5) / receptivefield
-            center_y = (j + 0.5) / receptivefield
+            center_x = (i + 0.5) / feat_size
+            center_y = (j + 0.5) / feat_size
 
             prior_bboxes.append([center_x, center_y, down_size, down_size])
             prior_bboxes.append([center_x, center_y, sqrt_size, sqrt_size])
@@ -103,7 +103,7 @@ def assert_prior_bboxes(gt_bbox, gt_label, prior_bboxes, iou_threshold=0.5):
     '''
     
 
-    # 如果是gt在前，那么返回的矩阵：num_target * num_prior, 反之则为： num_prior * num_target
+    # 如果是gt在前，那么返回的矩阵：num_target * num_prior
     ious = jaccard(gt_bbox, prior_bboxes)
 
     # tensor自带的min、max方法默认返回的value，index
@@ -316,4 +316,69 @@ def nms(pred_loc, pred_conf, prob_threshold=0.0, iou_threshold=0.5, topN=200):
 
 
 
+
+def nms1(pred_loc, pred_conf, prob_threshold=0.0, iou_threshold=0.5, topN=200):
+    '''非极大值抑制
+    输入：
+    @pred_loc：模型的目标框回归结果，前提是已经offset->corner了    -> torch.tensor(num_prior, 4)
+    @pred_conf：模型的目标框预测结果，不需要额外的前置      -> torch.tensor(num_prior, num_class)
+    @prob：挑选预测概率大于prob的预测结果来进行非极大值抑制
+    @topN：挑选预测概率降序后的topN个框来进行非极大值抑制
+    输出：
+    @final_bboxes：最终预测的目标框[x1,y1,x2,y2]     -> torch.tensor(num_filted, 4)
+    @final_labels：最终预测的类别        ->   torch.tensor(num_filted,)
+    @final_probs：最终预测的概率        ->   torch.tensor(num_filted,)
+    '''
+    pred_loc = pred_loc.to(torch.device('cpu'))
+    pred_conf = pred_conf.to(torch.device('cpu'))
+
+    pred_softmax = F.softmax(pred_conf, dim=-1)   # softmax操作（num_prior, num_class）
+
+    class_num = pred_conf.size(-1)
+    nms_bboxes, nms_probs, nms_labels = [], [], []
+
+    for i in range(1, class_num):
+        probs = pred_softmax[:, i]  # （num_prior,）
+        mask = probs > prob_threshold
+
+        # 这里得到的数据是将概率低于阈值的过滤
+        pred_prob = probs[mask].reshape(-1)
+        pred_bboxes = pred_loc[mask].reshape(-1, 4)   # （num_filted, 4）
+
+
+        # 预测概率降序排列得到排列的索引，为了减小计算量，可以只取topN的数据
+        _, idx = pred_prob.sort(dim=-1, descending=True)
+        idx = idx[:topN]    # 预测概率降序的topN的索引
+
+
+        keep = []   # 用来装载nms之后的可用的索引
+        while(idx.numel() > 0):
+            keep.append(idx[0])   # 概率最大的可用
+            bbox = pred_bboxes[idx[0]].reshape(1, 4)  # 最大概率的框坐标
+
+            idx = idx[1:]    # 剔除最大的
+            other_bboxes = pred_bboxes[idx].reshape(-1, 4)
+
+            iou = jaccard(bbox, other_bboxes)[0]   # 大小(1, len(idx[1:]))
+            idx = idx[iou < iou_threshold]   # 符合iou阈值的都是要剔除的，剩余的才能走接下来的循环
+        
+        if keep != []:
+            temp_labels = torch.LongTensor([i] * len(keep)).to(pred_loc.device)
+            keep = torch.LongTensor(keep).to(pred_loc.device)
+            
+
+            nms_bboxes.append(torch.index_select(pred_bboxes, 0, keep))
+            nms_probs.append(torch.index_select(pred_prob, 0, keep))
+            nms_labels.append(temp_labels)
+    
+    if nms_bboxes != []:
+        nms_bboxes = torch.cat(nms_bboxes, 0)
+        nms_probs = torch.cat(nms_probs, 0)
+        nms_labels = torch.cat(nms_labels, 0)
+    else:
+        nms_bboxes = pred_loc.new()
+        nms_probs = pred_loc.new()
+        nms_labels = pred_loc.new()
+    
+    return nms_bboxes, nms_probs, nms_labels
 
